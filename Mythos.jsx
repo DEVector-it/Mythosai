@@ -5,6 +5,24 @@ import {
   Shield, CheckCircle, Bell, Trash2, Pencil, Save, XCircle, Search, ChevronLeft, ChevronRight,
   SortAsc, SortDesc, Info, KeyRound, Eye, EyeOff, Copy, AlertTriangle
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+
+/* =============================================================================
+   MythOS — Single-file React component (stabilized)
+   FIXES:
+   - Robust null checks for user/author fields (prevents crash in panels)
+   - ErrorBoundary wrapper to catch render-time errors
+   - Safer announcements filtering/sorting (handles missing fields)
+   - Guarded keyboard handler; uses canManage computed earlier
+   - Chat proxy fallback kept; no crash when /api/chat fails
+   - UI shows placeholders if user fields absent
+   - Minor animation polish with framer-motion
+
+   Render deploy hints:
+   - Root Directory: (optional) apps/web
+   - Build Command:  yarn && yarn build
+   - Start Command:  yarn preview --host 0.0.0.0 --port $PORT  (Vite)
+============================================================================= */
 
 /* ----------------------------------------------------------------------------
    Utilities
@@ -43,28 +61,55 @@ const useDebouncedState = (initial, ms = 300) => {
 };
 
 /* ----------------------------------------------------------------------------
+   Animation helpers
+---------------------------------------------------------------------------- */
+const fade = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.25 } },
+  exit: { opacity: 0, transition: { duration: 0.2 } }
+};
+
+const slideUp = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.25, ease: 'easeOut' } },
+  exit: { opacity: 0, y: 16, transition: { duration: 0.2 } }
+};
+
+const scaleIn = {
+  initial: { opacity: 0, scale: 0.98 },
+  animate: { opacity: 1, scale: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, scale: 0.98, transition: { duration: 0.15 } }
+};
+
+/* ----------------------------------------------------------------------------
    Toasts
 ---------------------------------------------------------------------------- */
 function Toasts({ toasts, remove }) {
   return (
     <div className="fixed bottom-4 right-4 z-[1000] space-y-2">
-      {toasts.map(t => (
-        <div
-          key={t.id}
-          className={`flex items-start gap-3 rounded-xl px-4 py-3 shadow-xl border
-            ${t.type === 'error' ? 'bg-red-500/15 border-red-500/40 text-red-200' :
-              t.type === 'warn' ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-200' :
-              'bg-white/10 border-white/20 text-white'}`}
-        >
-          {t.type === 'error' ? <AlertTriangle size={18} className="mt-0.5" /> :
-           t.type === 'warn' ? <Info size={18} className="mt-0.5" /> :
-           <Sparkles size={18} className="mt-0.5" />}
-          <div className="text-sm">{t.message}</div>
-          <button onClick={() => remove(t.id)} className="ml-2 opacity-70 hover:opacity-100">
-            <X size={16} />
-          </button>
-        </div>
-      ))}
+      <AnimatePresence>
+        {toasts.map(t => (
+          <motion.div
+            key={t.id}
+            variants={slideUp}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className={`flex items-start gap-3 rounded-xl px-4 py-3 shadow-xl border
+              ${t.type === 'error' ? 'bg-red-500/15 border-red-500/40 text-red-200' :
+                t.type === 'warn' ? 'bg-yellow-500/15 border-yellow-500/40 text-yellow-200' :
+                'bg-white/10 border-white/20 text-white'}`}
+          >
+            {t.type === 'error' ? <AlertTriangle size={18} className="mt-0.5" /> :
+             t.type === 'warn' ? <Info size={18} className="mt-0.5" /> :
+             <Sparkles size={18} className="mt-0.5" />}
+            <div className="text-sm">{t.message}</div>
+            <button onClick={() => remove(t.id)} className="ml-2 opacity-70 hover:opacity-100">
+              <X size={16} />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -73,20 +118,62 @@ function Toasts({ toasts, remove }) {
    Confirm Modal
 ---------------------------------------------------------------------------- */
 function Confirm({ open, title, desc, onCancel, onConfirm }) {
-  if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[900] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/60" onClick={onCancel} />
-      <div className="relative bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 max-w-md w-[92%]">
-        <h3 className="text-white font-bold text-xl mb-2">{title}</h3>
-        <p className="text-white/80 text-sm mb-5">{desc}</p>
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20">Cancel</button>
-          <button onClick={onConfirm} className="px-4 py-2 rounded-lg bg-red-500/30 text-red-200 hover:bg-red-500/40">Delete</button>
-        </div>
-      </div>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div className="fixed inset-0 z-[900] flex items-center justify-center">
+          <motion.div
+            className="absolute inset-0 bg-black/60"
+            variants={fade}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            onClick={onCancel}
+          />
+          <motion.div
+            variants={scaleIn}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="relative bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl p-6 max-w-md w-[92%]"
+          >
+            <h3 className="text-white font-bold text-xl mb-2">{title}</h3>
+            <p className="text-white/80 text-sm mb-5">{desc}</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={onCancel} className="px-4 py-2 rounded-lg bg-white/10 text-white hover:bg-white/20">Cancel</button>
+              <button onClick={onConfirm} className="px-4 py-2 rounded-lg bg-red-500/30 text-red-200 hover:bg-red-500/40">Delete</button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
+}
+
+/* ----------------------------------------------------------------------------
+   Error Boundary
+---------------------------------------------------------------------------- */
+class ErrorBoundary extends React.Component {
+  constructor(props){super(props); this.state = { hasError:false, info:null };}
+  static getDerivedStateFromError(){ return { hasError:true }; }
+  componentDidCatch(error, info){ this.setState({ info }); console.error('MythOS crash:', error, info); }
+  render(){
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-6">
+          <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 w-full max-w-lg border border-white/20 text-white">
+            <h2 className="text-2xl font-bold mb-2">Something went wrong</h2>
+            <p className="text-white/80 mb-4">The UI crashed while rendering. Try reloading, or use Settings → Remove Feature/Banner to clear stored state.</p>
+            <details className="text-xs opacity-80 bg-black/30 p-3 rounded-lg">
+              <summary>Details</summary>
+              <pre>{JSON.stringify(this.state.info, null, 2)}</pre>
+            </details>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -154,14 +241,19 @@ export default function MythOS() {
   useEffect(() => { storage.set('mythos_announcements', announcements); }, [announcements]);
   useEffect(() => { storage.set('mythos_api', apiKey); }, [apiKey]);
 
+  /* ------------------- Role capability (compute early) ------------------- */
+  const canManage = (user?.role) === 'admin';
+
   /* ------------------- Auth ------------------- */
   const login = () => {
-    if (!loginData.username.trim() || !loginData.password.trim()) {
+    const uname = (loginData.username||'').trim();
+    const pwd = (loginData.password||'').trim();
+    if (!uname || !pwd) {
       pushToast('Enter a username and password.', 'warn');
       return;
     }
-    setUser({ name: loginData.username.trim(), role: loginData.role });
-    pushToast(`Welcome, ${loginData.username.trim()}!`);
+    setUser({ name: uname, role: loginData.role || 'student' });
+    pushToast(`Welcome, ${uname}!`);
   };
 
   const logout = () => {
@@ -170,30 +262,30 @@ export default function MythOS() {
     pushToast('You are logged out.');
   };
 
-  /* ------------------- AI Chat (placeholder fetch) ------------------- */
-  const getPrompt = () => `You are Myth OS, created by Hossein - the ultimate AI study assistant.
+  /* ------------------- AI Chat ------------------- */
+  const getPrompt = () => `You are Myth OS, created by Hossein - the ultimate AI study assistant.\n\nRole: ${(user?.role)||'student'}\n\n${(user?.role)==='student' ? `Mission:\n- Explain step-by-step, simple then formal\n- Show all work for math/physics\n- Ask student to try steps before full solutions\n- Gently correct spelling/grammar\n- Make learning fun and engaging` : ''}\n\n${(user?.role)==='teacher' ? `Mission:\n- Generate quizzes and practice problems\n- Create lesson plans with structure\n- Provide rubrics and feedback\n- Suggest teaching strategies` : ''}\n\n${(user?.role)==='admin' ? `Mission:\n- Write professional announcements\n- Summarize data clearly\n- Help with planning and communication` : ''}\n\nStyle: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest about uncertainty.`;
 
-Role: ${user.role}
-
-${user.role === 'student' ? `Mission:
-- Explain step-by-step, simple then formal
-- Show all work for math/physics
-- Ask student to try steps before full solutions
-- Gently correct spelling/grammar
-- Make learning fun and engaging` : ''}
-
-${user.role === 'teacher' ? `Mission:
-- Generate quizzes and practice problems
-- Create lesson plans with structure
-- Provide rubrics and feedback
-- Suggest teaching strategies` : ''}
-
-${user.role === 'admin' ? `Mission:
-- Write professional announcements
-- Summarize data clearly
-- Help with planning and communication` : ''}
-
-Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest about uncertainty.`;
+  const callProxy = useCallback(async (messages) => {
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system: getPrompt(),
+          messages,
+          apiKey: apiKey || undefined,
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data?.text) return data.text;
+      if (Array.isArray(data?.content)) return data.content?.[0]?.text || '';
+      return String(data || '');
+    } catch (err) {
+      console.error('Proxy error', err);
+      return null;
+    }
+  }, [apiKey, user?.role, settings]);
 
   const send = async () => {
     if (!input.trim() || loading) return;
@@ -204,11 +296,15 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
     setLoading(true);
 
     try {
-      // You can wire to your real LLM here.
-      // Demo: echo answer with small delay.
-      await new Promise(r => setTimeout(r, 400));
-      const demoAnswer = `You said:\n\n${text}\n\n(Connect your real model by replacing this demo block.)`;
-      setMsgs(prev => [...prev, { role: 'assistant', content: demoAnswer }]);
+      const history = [...msgs, userMsg].map(m => ({ role: m.role, content: m.content }));
+      let reply = await callProxy(history);
+
+      if (!reply) {
+        // Demo fallback
+        await new Promise(r => setTimeout(r, 250));
+        reply = `You said:\n\n${text}\n\n(Connect your real model via /api/chat to replace this demo.)`;
+      }
+      setMsgs(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch (e) {
       setMsgs(prev => [...prev, { role: 'assistant', content: 'Error. Please retry.' }]);
       pushToast('Chat error. Check your connection.', 'error');
@@ -217,7 +313,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
     }
   };
 
-  // keyboard shortcut: Ctrl/Cmd+Enter to send
+  // keyboard shortcut: Ctrl/Cmd+Enter to send (guarded)
   useEffect(() => {
     const handler = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -227,25 +323,24 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [tab, input, announcementData.title, announcementData.message]);
+  }, [tab, canManage, input, announcementData.title, announcementData.message]);
 
   /* ------------------- Announcements logic ------------------- */
-  const canManage = user?.role === 'admin';
-
   const filteredSorted = useMemo(() => {
     const q = searchDebounced.trim().toLowerCase();
-    let list = announcements.filter(a =>
-      !q ||
-      a.title.toLowerCase().includes(q) ||
-      a.message.toLowerCase().includes(q) ||
-      a.author.toLowerCase().includes(q)
-    );
+    let list = (announcements||[]).filter(a => {
+      const t = (a?.title||'').toLowerCase();
+      const m = (a?.message||'').toLowerCase();
+      const au = (a?.author||'').toLowerCase();
+      return !q || t.includes(q) || m.includes(q) || au.includes(q);
+    });
     list.sort((a, b) => {
       const dir = sortDir === 'asc' ? 1 : -1;
-      if (sortKey === 'title') return a.title.localeCompare(b.title) * dir;
-      if (sortKey === 'author') return a.author.localeCompare(b.author) * dir;
-      // date
-      return (new Date(a.date).getTime() - new Date(b.date).getTime()) * dir;
+      if (sortKey === 'title') return (a?.title||'').localeCompare(b?.title||'') * dir;
+      if (sortKey === 'author') return (a?.author||'').localeCompare(b?.author||'') * dir;
+      const ad = new Date(a?.date||0).getTime();
+      const bd = new Date(b?.date||0).getTime();
+      return (ad - bd) * dir;
     });
     return list;
   }, [announcements, searchDebounced, sortKey, sortDir]);
@@ -257,8 +352,8 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
 
   const publishAnnouncement = () => {
     if (!canManage) { pushToast('Only admins can publish announcements.', 'warn'); return; }
-    const title = announcementData.title.trim();
-    const message = announcementData.message.trim();
+    const title = (announcementData.title||'').trim();
+    const message = (announcementData.message||'').trim();
     if (title.length < 3) { pushToast('Title must be at least 3 characters.', 'warn'); return; }
     if (message.length < 5) { pushToast('Message must be at least 5 characters.', 'warn'); return; }
 
@@ -266,27 +361,20 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
       id: uid(),
       title,
       message,
-      author: user.name,
+      author: (user?.name)||'System',
       verified: true,
       date: nowISO()
     };
 
-    // Optimistic update + faux async
     setAnnouncements(prev => [newA, ...prev]);
     setAnnouncementData({ title: '', message: '' });
-
-    // simulate network
-    setTimeout(() => {
-      // if you had an error, rollback here
-      // pushToast('Announcement failed to publish.', 'error');
-    }, 200);
     pushToast('Announcement published.');
   };
 
   const startEdit = (a) => {
-    if (!canManage) return;
+    if (!canManage || !a) return;
     setEditingId(a.id);
-    setEditDraft({ title: a.title, message: a.message });
+    setEditDraft({ title: a.title || '', message: a.message || '' });
   };
 
   const cancelEdit = () => {
@@ -296,7 +384,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
 
   const saveEdit = (id) => {
     if (!canManage) return;
-    const t = editDraft.title.trim(); const m = editDraft.message.trim();
+    const t = (editDraft.title||'').trim(); const m = (editDraft.message||'').trim();
     if (t.length < 3) { pushToast('Title must be at least 3 characters.', 'warn'); return; }
     if (m.length < 5) { pushToast('Message must be at least 5 characters.', 'warn'); return; }
 
@@ -317,11 +405,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
     setConfirmOpen(false);
     setPendingDelete(null);
     if (!id) return;
-    const prev = announcements;
-    setAnnouncements(prev.filter(a => a.id !== id));
-    setTimeout(() => {
-      // rollback example (if needed): setAnnouncements(prev);
-    }, 150);
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
     pushToast('Announcement deleted.');
   };
 
@@ -334,11 +418,11 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
   allTabs.push({ id: 'study', name: 'Study Plan', icon: Target });
   allTabs.push({ id: 'progress', name: 'Progress', icon: Award });
   if (settings.feature) allTabs.push({ id: 'special', name: settings.feature, icon: Sparkles });
-  if (user?.role === 'teacher') {
+  if ((user?.role) === 'teacher') {
     allTabs.push({ id: 'lessons', name: 'Lessons', icon: BookOpen });
     allTabs.push({ id: 'quizzes', name: 'Quizzes', icon: FileText });
   }
-  if (user?.role === 'admin') {
+  if ((user?.role) === 'admin') {
     allTabs.push({ id: 'analytics', name: 'Analytics', icon: BarChart3 });
     allTabs.push({ id: 'announce', name: 'Announce', icon: Users });
     allTabs.push({ id: 'settings', name: 'Settings', icon: SettingsIcon });
@@ -348,11 +432,11 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 flex items-center justify-center p-4">
-        <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 w-full max-w-md border border-white/20 shadow-2xl">
+        <motion.div variants={scaleIn} initial="initial" animate="animate" className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 w-full max-w-md border border-white/20 shadow-2xl">
           <div className="text-center mb-8">
-            <div className="inline-block p-4 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl mb-4">
+            <motion.div variants={scaleIn} className="inline-block p-4 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-2xl mb-4">
               <Brain size={48} className="text-white" />
-            </div>
+            </motion.div>
             <h1 className="text-4xl font-bold text-white mb-2">Myth OS</h1>
             <p className="text-purple-200">{isSignUp ? 'Create Account' : 'Ultimate AI Study Platform'}</p>
           </div>
@@ -391,7 +475,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
                   key={r}
                   onClick={() => setLoginData({ ...loginData, role: r })}
                   className={`p-3 rounded-xl font-medium transition-all ${
-                    loginData.role === r
+                    (loginData.role||'student') === r
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
                       : 'bg-white/10 text-white hover:bg-white/20'
                   }`}
@@ -442,7 +526,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
           </div>
 
           <p className="text-center text-white/60 text-sm mt-6">Created by Hossein</p>
-        </div>
+        </motion.div>
         <Toasts toasts={toasts} remove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
       </div>
     );
@@ -463,17 +547,26 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
           </div>
         )}
 
-        {msgs.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl p-4 ${
-              m.role === 'user'
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-                : 'bg-white/10 backdrop-blur-lg text-white border border-white/10'
-            }`}>
-              <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
-            </div>
-          </div>
-        ))}
+        <AnimatePresence initial={false}>
+          {msgs.map((m, i) => (
+            <motion.div
+              key={i}
+              variants={slideUp}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`max-w-[85%] rounded-2xl p-4 ${
+                m.role === 'user'
+                  ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                  : 'bg-white/10 backdrop-blur-lg text-white border border-white/10'
+              }`}>
+                <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {loading && (
           <div className="flex justify-start">
@@ -496,14 +589,16 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
             rows={2}
             disabled={loading}
           />
-          <button
+          <motion.button
+            whileTap={{ scale: 0.98 }}
+            whileHover={{ scale: 1.02 }}
             onClick={send}
             disabled={loading || !input.trim()}
             className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 text-white font-semibold hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             title="Send (Ctrl/⌘+Enter)"
           >
             {loading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-          </button>
+          </motion.button>
         </div>
       </div>
     </div>
@@ -513,32 +608,32 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
     <div className="p-6 overflow-y-auto h-full">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="grid grid-cols-3 gap-6">
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+          <motion.div variants={scaleIn} initial="initial" animate="animate" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-semibold">Students</h3>
               <Users className="text-blue-400" size={24} />
             </div>
             <p className="text-4xl font-bold text-white">1,247</p>
             <p className="text-green-400 text-sm mt-2">+12% growth</p>
-          </div>
+          </motion.div>
 
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+          <motion.div variants={scaleIn} initial="initial" animate="animate" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-semibold">Teachers</h3>
               <BookOpen className="text-purple-400" size={24} />
             </div>
             <p className="text-4xl font-bold text-white">64</p>
             <p className="text-green-400 text-sm mt-2">+3 new</p>
-          </div>
+          </motion.div>
 
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+          <motion.div variants={scaleIn} initial="initial" animate="animate" className="bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-semibold">Engagement</h3>
               <BarChart3 className="text-pink-400" size={24} />
             </div>
             <p className="text-4xl font-bold text-white">87%</p>
             <p className="text-green-400 text-sm mt-2">+5% up</p>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>
@@ -798,8 +893,11 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
           ) : (
             <>
               {pageItems.map(ann => (
-                <div
+                <motion.div
                   key={ann.id}
+                  variants={slideUp}
+                  initial="initial"
+                  animate="animate"
                   className="bg-white/10 backdrop-blur-lg rounded-2xl p-5 border border-white/10 hover:scale-[1.01] transition-transform"
                 >
                   <div className="flex items-start justify-between gap-4 mb-2">
@@ -825,7 +923,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
                           <h4 className="text-white font-bold text-lg break-words">{ann.title}</h4>
                           <div className="flex items-center gap-3 flex-wrap mt-1">
                             <div className="flex items-center gap-2 bg-purple-500/20 px-3 py-1 rounded-full">
-                              <span className="text-purple-300 font-medium truncate">{ann.author}</span>
+                              <span className="text-purple-300 font-medium truncate">{ann.author || 'System'}</span>
                               {ann.verified && (
                                 <>
                                   <CheckCircle className="text-green-400" size={14} />
@@ -885,7 +983,7 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
                   {editingId !== ann.id && (
                     <p className="text-white/90 leading-relaxed">{ann.message}</p>
                   )}
-                </div>
+                </motion.div>
               ))}
 
               {/* Pagination */}
@@ -927,99 +1025,109 @@ Style: Smart, kind tutor. Clear paragraphs. School-appropriate. Always honest ab
 
   /* ------------------- Shell ------------------- */
   return (
-    <div className={`flex h-screen bg-gradient-to-br ${settings.bg}`}>
-      {settings.showBanner && settings.banner && (
-        <div className="absolute top-0 left-0 right-0 bg-yellow-500/90 text-black p-3 text-center font-semibold z-50">
-          {settings.banner}
-        </div>
-      )}
-
-      {/* Sidebar */}
-      <div className={`${sidebar ? 'w-64' : 'w-0'} transition-all duration-300 bg-black/30 backdrop-blur-xl border-r border-white/10 overflow-hidden ${settings.showBanner && settings.banner ? 'mt-12' : ''}`}>
-        <div className="p-4 h-full flex flex-col">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl">
-              <Brain size={24} className="text-white" />
-            </div>
-            <div>
-              <h2 className="text-white font-bold text-lg">Myth OS</h2>
-              <p className="text-purple-300 text-xs capitalize">{user.role}</p>
-            </div>
-          </div>
-
-          <div className="space-y-2 flex-1 overflow-y-auto">
-            {allTabs.map(t => {
-              const Icon = t.icon;
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setTab(t.id)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
-                    tab === t.id
-                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
-                      : 'text-white/70 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Icon size={20} />
-                  <span className="font-medium">{t.name}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="pt-6 border-t border-white/10">
-            <div className="p-3 bg-white/5 rounded-xl mb-2">
-              <p className="text-white font-medium">{user.name}</p>
-              <p className="text-purple-300 text-sm capitalize">{user.role}</p>
-            </div>
-            <button
-              onClick={logout}
-              className="w-full flex items-center gap-3 p-3 rounded-xl text-red-400 hover:bg-red-500/20 transition-all"
-            >
-              <LogOut size={20} />
-              <span className="font-medium">Logout</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Header + Body */}
-      <div className={`flex-1 flex flex-col ${settings.showBanner && settings.banner ? 'mt-12' : ''}`}>
-        <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setSidebar(!sidebar)}
-              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-            >
-              {sidebar ? <X size={20} /> : <Menu size={20} />}
-            </button>
-            <div>
-              <h1 className="text-xl font-bold text-white">
-                {allTabs.find(t => t.id === tab)?.name}
-              </h1>
-              <p className="text-sm text-purple-300">Welcome, {user.name}!</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-hidden">
-          {tab === 'chat' && <ChatTab />}
-          {tab === 'analytics' && <AnalyticsTab />}
-          {tab === 'settings' && <SettingsTab />}
-          {tab === 'study' && <StudyTab />}
-          {tab === 'progress' && <ProgressTab />}
-          {tab === 'announce' && <AnnounceTab />}
-          {/* placeholder simple tabs */}
-          {['math','science','writing','lessons','quizzes','special'].includes(tab) && (
-            <div className="p-6 text-white/80">
-              <p className="text-lg">This section is a placeholder. Build your tools here 🚀</p>
-            </div>
+    <ErrorBoundary>
+      <div className={`flex h-screen bg-gradient-to-br ${settings.bg}`}>
+        <AnimatePresence>
+          {settings.showBanner && settings.banner && (
+            <motion.div variants={slideUp} initial="initial" animate="animate" exit="exit" className="absolute top-0 left-0 right-0 bg-yellow-500/90 text-black p-3 text-center font-semibold z-50">
+              {settings.banner}
+            </motion.div>
           )}
-        </div>
-      </div>
+        </AnimatePresence>
 
-      <Toasts toasts={toasts} remove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
-    </div>
+        {/* Sidebar */}
+        <motion.div
+          animate={{ width: sidebar ? 256 : 0 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+          className={`${settings.showBanner && settings.banner ? 'mt-12' : ''} bg-black/30 backdrop-blur-xl border-r border-white/10 overflow-hidden`}
+        >
+          <div className="p-4 h-full flex flex-col w-64">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl">
+                <Brain size={24} className="text-white" />
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-lg">Myth OS</h2>
+                <p className="text-purple-300 text-xs capitalize">{(user?.role)||'guest'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 flex-1 overflow-y-auto pr-1">
+              {allTabs.map(t => {
+                const Icon = t.icon; const active = tab === t.id;
+                return (
+                  <motion.button
+                    key={t.id}
+                    whileHover={{ x: 2 }}
+                    onClick={() => { try { setTab(t.id); } catch(e){ console.error(e); } }}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                      active
+                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white'
+                        : 'text-white/70 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span className="font-medium">{t.name}</span>
+                  </motion.button>
+                );
+              })}
+            </div>
+
+            <div className="pt-6 border-t border-white/10">
+              <div className="p-3 bg-white/5 rounded-xl mb-2">
+                <p className="text-white font-medium">{user?.name || 'User'}</p>
+                <p className="text-purple-300 text-sm capitalize">{(user?.role)||'guest'}</p>
+              </div>
+              <button
+                onClick={logout}
+                className="w-full flex items-center gap-3 p-3 rounded-xl text-red-400 hover:bg-red-500/20 transition-all"
+              >
+                <LogOut size={20} />
+                <span className="font-medium">Logout</span>
+              </button>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Header + Body */}
+        <div className={`flex-1 flex flex-col ${settings.showBanner && settings.banner ? 'mt-12' : ''}`}>
+          <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 p-4 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={() => setSidebar(!sidebar)}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                {sidebar ? <X size={20} /> : <Menu size={20} />}
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-white">
+                  {allTabs.find(t => t.id === tab)?.name}
+                </h1>
+                <p className="text-sm text-purple-300">Welcome{user?.name?`, ${user.name}`:''}!</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-hidden">
+            {tab === 'chat' && <ChatTab />}
+            {tab === 'analytics' && <AnalyticsTab />}
+            {tab === 'settings' && <SettingsTab />}
+            {tab === 'study' && <StudyTab />}
+            {tab === 'progress' && <ProgressTab />}
+            {tab === 'announce' && <AnnounceTab />}
+            {/* placeholder simple tabs */}
+            {['math','science','writing','lessons','quizzes','special'].includes(tab) && (
+              <div className="p-6 text-white/80">
+                <p className="text-lg">This section is a placeholder. Build your tools here 🚀</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Toasts toasts={toasts} remove={(id) => setToasts(prev => prev.filter(t => t.id !== id))} />
+      </div>
+    </ErrorBoundary>
   );
 }
+
 
